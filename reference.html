@@ -1,0 +1,84 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black Hole Playground</title>
+<style>
+html, body {margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:#03040a;font-family:Inter,system-ui,Segoe UI,Arial;}
+canvas{display:block;}
+#ui{position:fixed;left:12px;top:12px;color:#dfe7ff;z-index:20;backdrop-filter: blur(6px)}
+.panel{background:rgba(0,0,0,0.25);padding:10px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.6);}
+.hint{opacity:0.8;font-size:13px}.small{font-size:12px;color:#a9b6d8}
+button{background:#131722;color:#fff;border:0;padding:6px 10px;border-radius:8px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="ui" class="panel">
+<div style="font-weight:600">Black Hole Playground</div>
+<div class="small hint">Drag the black hole or move your mouse to pull it with realistic physics. Watch it grow when it swallows ships.</div>
+<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+<div id="sizeText">Size: 60</div>
+<button id="resetBtn">Reset</button>
+</div>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d',{alpha:true});
+let W=canvas.width=innerWidth;
+let H=canvas.height=innerHeight;
+addEventListener('resize',()=>{W=canvas.width=innerWidth;H=canvas.height=innerHeight;});
+
+
+const blackHole={x:W/2,y:H/2,vx:0,vy:0,mass:60,targetX:W/2,targetY:H/2,dragging:false,dragOffsetX:0,dragOffsetY:0,radius(){return Math.max(10,this.mass);}};
+
+
+const ships=[];
+const maxShips=120;
+function spawnShip(){
+ const edge=Math.floor(Math.random()*4);
+ let x,y;
+ const padding=30;
+ if(edge===0){x=-padding;y=Math.random()*H;}
+ else if(edge===1){x=W+padding;y=Math.random()*H;}
+ else if(edge===2){x=Math.random()*W;y=-padding;}
+ else{x=Math.random()*W;y=H+padding;}
+ const size=8+Math.random()*26;
+ const angle=Math.random()*Math.PI*2;
+ const speed=0.2+Math.random()*0.9;
+ const vx=(Math.random()-0.5)*0.6+(W/2-x)*0.0004;
+ const vy=(Math.random()-0.5)*0.6+(H/2-y)*0.0004;
+ ships.push({x,y,vx,vy,size,angle,rotSpeed:(Math.random()-0.5)*0.02,spawned:performance.now()});
+}
+for(let i=0;i<25;i++) spawnShip();
+// reduced spawn frequency slightly
+setInterval(()=>{for(let i=0;i<3;i++) if(ships.length<maxShips) spawnShip();},800);
+
+
+function getPointer(e){if(e.touches&&e.touches[0]) return {x:e.touches[0].clientX,y:e.touches[0].clientY};return {x:e.clientX,y:e.clientY};}
+canvas.addEventListener('mousedown',e=>{const p=getPointer(e);const dx=p.x-blackHole.x;const dy=p.y-blackHole.y;if(Math.hypot(dx,dy)<blackHole.radius()){blackHole.dragging=true;blackHole.dragOffsetX=blackHole.x-p.x;blackHole.dragOffsetY=blackHole.y-p.y;}});
+canvas.addEventListener('mouseup',()=>{blackHole.dragging=false;});
+canvas.addEventListener('mousemove',e=>{const p=getPointer(e);blackHole.targetX=p.x;blackHole.targetY=p.y;if(blackHole.dragging){blackHole.x=p.x+blackHole.dragOffsetX;blackHole.y=p.y+blackHole.dragOffsetY;blackHole.vx=0;blackHole.vy=0;}});
+canvas.addEventListener('touchstart',e=>{const p=getPointer(e);const dx=p.x-blackHole.x;const dy=p.y-blackHole.y;if(Math.hypot(dx,dy)<blackHole.radius()){blackHole.dragging=true;blackHole.dragOffsetX=blackHole.x-p.x;blackHole.dragOffsetY=blackHole.y-p.y;}});
+canvas.addEventListener('touchmove',e=>{const p=getPointer(e);blackHole.targetX=p.x;blackHole.targetY=p.y;if(blackHole.dragging){blackHole.x=p.x+blackHole.dragOffsetX;blackHole.y=p.y+blackHole.dragOffsetY;blackHole.vx=0;blackHole.vy=0;}e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',()=>{blackHole.dragging=false;});
+
+
+const flashes=[];
+function createFlash(x,y,r){flashes.push({x,y,r,life:1});}
+function updateAndDrawFlashes(){for(let i=flashes.length-1;i>=0;i--){const f=flashes[i];f.life-=0.03;if(f.life<=0){flashes.splice(i,1);continue;}ctx.save();ctx.globalCompositeOperation='lighter';ctx.beginPath();ctx.arc(f.x,f.y,f.r*(1+(1-f.life)),0,Math.PI*2);ctx.fillStyle=`rgba(255,210,160,${0.35*f.life})`;ctx.fill();ctx.restore();}}
+
+
+function drawBlackHole(){const x=blackHole.x,y=blackHole.y,r=blackHole.radius();const wobble=Math.sin(performance.now()/450+x*0.01)*0.8;ctx.save();ctx.translate(x,y);for(let i=6;i>=1;i--){ctx.beginPath();ctx.arc(0,0,r*1.6+i*6,0,Math.PI*2);ctx.fillStyle=`rgba(255,150,40,${0.02*i})`;ctx.fill();}for(let b=0;b<5;b++){const rad=r*0.9+b*(r*0.25);ctx.save();ctx.rotate((performance.now()/3000)*(0.3+b*0.12));const grd=ctx.createRadialGradient(0,0,rad*0.85,0,0,rad*1.05);grd.addColorStop(0,`rgba(255,235,200,${0.05+0.02*b})`);grd.addColorStop(1,'rgba(0,0,0,0)');ctx.beginPath();ctx.ellipse(0,0,rad*1.12,rad*0.4,0,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill();ctx.restore();}ctx.beginPath();ctx.arc(0,0,r*0.65,0,Math.PI*2);ctx.fillStyle='#000';ctx.fill();ctx.beginPath();ctx.arc(0,0,r*0.66,0,Math.PI*2);ctx.lineWidth=Math.max(2,r*0.12);ctx.strokeStyle='rgba(255,200,140,0.7)';ctx.stroke();const inner=ctx.createRadialGradient(0,0,r*0.2,0,0,r*1.2);inner.addColorStop(0,'rgba(255,255,255,0.06)');inner.addColorStop(1,'rgba(0,0,0,0)');ctx.beginPath();ctx.arc(0,0,r*1.0,0,Math.PI*2);ctx.fillStyle=inner;ctx.fill();ctx.restore();}
+
+
+function drawShip(s){ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.angle);const sz=s.size;ctx.beginPath();ctx.moveTo(sz,0);ctx.lineTo(-sz*0.6,-sz*0.6);ctx.lineTo(-sz*0.6,sz*0.6);ctx.closePath();const g=ctx.createLinearGradient(-sz,-sz,sz,sz);g.addColorStop(0,'rgba(180,200,255,0.95)');g.addColorStop(0.5,'rgba(120,150,255,0.95)');g.addColorStop(1,'rgba(80,110,200,0.9)');ctx.fillStyle=g;ctx.fill();ctx.lineWidth=Math.max(1,sz*0.08);ctx.strokeStyle='rgba(20,30,40,0.8)';ctx.stroke();ctx.beginPath();ctx.ellipse(sz*0.1,0,sz*0.25,sz*0.2,0,0,Math.PI*2);ctx.fillStyle='rgba(10,20,30,0.6)';ctx.fill();ctx.restore();}
+
+
+function tick(){ctx.clearRect(0,0,W,H);if(!blackHole.dragging){const dx=blackHole.targetX-blackHole.x;const dy=blackHole.targetY-blackHole.y;const dist=Math.sqrt(dx*dx+dy*dy);const accel=Math.min(dist*0.001,2);blackHole.vx+=dx*accel*0.02;blackHole.vy+=dy*accel*0.02;blackHole.vx*=0.95;blackHole.vy*=0.95;blackHole.x+=blackHole.vx;blackHole.y+=blackHole.vy;}drawBlackHole();for(let i=ships.length-1;i>=0;i--){const s=ships[i];const dx=blackHole.x-s.x;const dy=blackHole.y-s.y;const dist=Math.sqrt(dx*dx+dy*dy);const influence=blackHole.radius()*6+20;if(dist<influence){const a=Math.min((9000*blackHole.radius())/(dist*dist+20),0.7);s.vx+=(dx/dist)*a;s.vy+=(dy/dist)*a;}s.vx*=0.9996;s.vy*=0.9996;s.x+=s.vx;s.y+=s.vy;s.angle+=s.rotSpeed;if(dist<blackHole.radius()*0.9){const shipArea=Math.PI*(s.size/2)*(s.size/2);const bhArea=Math.PI*blackHole.radius()*blackHole.radius();const newArea=bhArea+shipArea;blackHole.mass=Math.sqrt(newArea/Math.PI);createFlash(s.x,s.y,Math.max(6,s.size));ships.splice(i,1);continue;}if(s.x<-200||s.x>W+200||s.y<-200||s.y>H+200){ships.splice(i,1);continue;}drawShip(s);}updateAndDrawFlashes();document.getElementById('sizeText').textContent=`Size: ${Math.round(blackHole.radius())}`;requestAnimationFrame(tick);}
+requestAnimationFrame(tick);
+document.getElementById('resetBtn').addEventListener('click',()=>{ships.length=0;blackHole.x=W/2;blackHole.y=H/2;blackHole.mass=60;for(let i=0;i<25;i++) spawnShip();});
+</script>
+</body>
+</html>

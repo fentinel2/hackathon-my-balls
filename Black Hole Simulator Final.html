@@ -1,0 +1,165 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { margin: 0; overflow: hidden; background-color: #1B161C; font-family: Arial, sans-serif; }
+  #circle {
+    width: 20px;
+    height: 20px;
+    background-color: #000000;
+    border-radius: 50%;
+    border: 2px solid yellow;
+    position: absolute;
+    top: 100px;
+    left: 100px;
+    cursor: grab;
+    user-select: none;
+    z-index: 10;
+  }
+  #circle:active { cursor: grabbing; }
+</style>
+</head>
+<body>
+
+
+<canvas id="gameCanvas"></canvas>
+<div id="circle"></div>
+
+
+<script>
+const MIN_RADIUS = 5;
+const MAX_RADIUS = 20;
+const MAX_SPEED = 0.5;
+const BASE_G = 5;
+
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+
+class Asteroid {
+    constructor() { this.reset(); }
+    reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.radius = MIN_RADIUS + Math.random() * (MAX_RADIUS - MIN_RADIUS);
+        this.color = `rgb(${100 + Math.random()*50}, ${100 + Math.random()*50}, ${100 + Math.random()*50})`;
+        this.vx = (Math.random() * 2 - 1) * MAX_SPEED;
+        this.vy = (Math.random() * 2 - 1) * MAX_SPEED;
+        this.alive = true;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < -this.radius) this.x = canvas.width + this.radius;
+        if (this.x > canvas.width + this.radius) this.x = -this.radius;
+        if (this.y < -this.radius) this.y = canvas.height + this.radius;
+        if (this.y > canvas.height + this.radius) this.y = -this.radius;
+    }
+    draw() {
+        if (!this.alive) return;
+        ctx.beginPath();
+        ctx.fillStyle = this.color;
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+
+const asteroids = [];
+for (let i = 0; i < 15; i++) asteroids.push(new Asteroid());
+setInterval(() => asteroids.push(new Asteroid()), 300);
+
+
+const circle = document.getElementById('circle');
+let offsetX = 0, offsetY = 0, isDragging = false;
+
+
+circle.addEventListener('mousedown', startDrag);
+document.addEventListener('mousemove', onDrag);
+document.addEventListener('mouseup', stopDrag);
+
+
+function startDrag(e) {
+    e.preventDefault(); isDragging = true;
+    const rect = circle.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
+}
+
+
+function onDrag(e) {
+    if (!isDragging) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    circle.style.left = (clientX - offsetX) + 'px';
+    circle.style.top = (clientY - offsetY) + 'px';
+}
+
+
+function stopDrag() { isDragging = false; }
+
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+
+    const bhRect = circle.getBoundingClientRect();
+    const bhX = bhRect.left + bhRect.width / 2;
+    const bhY = bhRect.top + bhRect.height / 2;
+    const bhRadius = bhRect.width / 2;
+    const bhMass = circle.offsetWidth;
+    const effectiveRange = bhRadius * 10;
+
+
+    for (let asteroid of asteroids) {
+        if (!asteroid.alive) continue;
+
+
+        const dx = bhX - asteroid.x;
+        const dy = bhY - asteroid.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+
+        if (dist < effectiveRange && dist > 0) {
+            const force = BASE_G * bhMass / (dist * dist);
+            asteroid.vx += (dx / dist) * force;
+            asteroid.vy += (dy / dist) * force;
+        }
+
+
+        if (dist < bhRadius + asteroid.radius) {
+            asteroid.alive = false;
+            const growthFactor = 1.00005;
+            circle.style.width = circle.offsetWidth * growthFactor + "px";
+            circle.style.height = circle.offsetHeight * growthFactor + "px";
+        }
+
+
+        asteroid.update();
+        asteroid.draw();
+    }
+
+
+    requestAnimationFrame(gameLoop);
+}
+
+
+gameLoop();
+
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+</script>
+
+
+</body>
+</html>
