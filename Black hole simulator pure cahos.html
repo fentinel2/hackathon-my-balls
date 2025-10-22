@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<!-- saved from url=(0095)file:///C:/Users/marin/Downloads/Black%20hole%20simulator%20satisfying%20%20most%20gravity.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { margin: 0; overflow: hidden; background-color: #1B161C; font-family: Arial, sans-serif; }
+  #circle {
+    width: 70px;
+    height: 70px;
+    background-color: #000000;
+    border-radius: 50%;
+    border: 2px solid yellow;
+    position: absolute;
+    top: 100px;
+    left: 100px;
+    cursor: grab;
+    user-select: none;
+    z-index: 10;
+  }
+  #circle:active { cursor: grabbing; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="1912" height="954"></canvas>
+<div id="circle" style="left: 853px; top: 450px;"></div>
+
+<script>
+const MIN_RADIUS = 5;
+const MAX_RADIUS = 20;
+const MAX_SPEED = 0.5;
+const BASE_G = 0.05;
+const BH_G = BASE_G * 50;
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+class Asteroid {
+    constructor() {
+        this.reset();
+    }
+
+    reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.radius = MIN_RADIUS + Math.random() * (MAX_RADIUS - MIN_RADIUS);
+        this.mass = this.radius * this.radius;
+        this.vx = (Math.random() * 2 - 1) * MAX_SPEED;
+        this.vy = (Math.random() * 2 - 1) * MAX_SPEED;
+        this.lifeSpan = 0;
+        this.orbitCount = 0;
+        this.lastAngle = null;
+        this.alive = true;
+    }
+
+    applyGravityFrom(other) {
+        const dx = other.x - this.x;
+        const dy = other.y - this.y;
+        const distSq = dx * dx + dy * dy + 100;
+        const dist = Math.sqrt(distSq);
+
+        if (dist < 500) {
+            const force = BASE_G * this.mass * other.mass / distSq;
+            const ax = (dx / dist) * force / this.mass;
+            const ay = (dy / dist) * force / this.mass;
+
+            this.vx += Math.max(-0.2, Math.min(0.2, ax));
+            this.vy += Math.max(-0.2, Math.min(0.2, ay));
+        }
+    }
+
+    updateOrbit(bhX, bhY) {
+        const dx = bhX - this.x;
+        const dy = bhY - this.y;
+        const angle = Math.atan2(dy, dx);
+
+        if (this.lastAngle !== null) {
+            const delta = angle - this.lastAngle;
+            if (Math.abs(delta) > Math.PI) {
+                this.orbitCount++;
+            }
+        }
+
+        this.lastAngle = angle;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.lifeSpan++;
+
+        if (this.x < -this.radius) this.x = canvas.width + this.radius;
+        if (this.x > canvas.width + this.radius) this.x = -this.radius;
+        if (this.y < -this.radius) this.y = canvas.height + this.radius;
+        if (this.y > canvas.height + this.radius) this.y = -this.radius;
+    }
+
+    draw() {
+        if (!this.alive) return;
+
+        const t = Math.min(this.lifeSpan / 1000, 1);
+        const r = Math.round(255 * (1 - t));
+        const g = Math.round(255 * t);
+        const b = 0;
+
+        ctx.beginPath();
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "white";
+        ctx.font = `${Math.max(10, this.radius)}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(this.orbitCount, this.x, this.y);
+    }
+}
+
+const asteroids = [];
+for (let i = 0; i < 15; i++) asteroids.push(new Asteroid());
+setInterval(() => asteroids.push(new Asteroid()), 200);
+
+const circle = document.getElementById('circle');
+let offsetX = 0, offsetY = 0, isDragging = false;
+
+circle.addEventListener('mousedown', startDrag);
+document.addEventListener('mousemove', onDrag);
+document.addEventListener('mouseup', stopDrag);
+
+function startDrag(e) {
+    e.preventDefault(); isDragging = true;
+    const rect = circle.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
+}
+
+function onDrag(e) {
+    if (!isDragging) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    circle.style.left = (clientX - offsetX) + 'px';
+    circle.style.top = (clientY - offsetY) + 'px';
+}
+
+function stopDrag() { isDragging = false; }
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const bhRect = circle.getBoundingClientRect();
+    const bhX = bhRect.left + bhRect.width / 2;
+    const bhY = bhRect.top + bhRect.height / 2;
+    const bhRadius = bhRect.width / 2;
+    const bhMass = circle.offsetWidth;
+    const effectiveRange = bhRadius * 20;
+
+    for (let i = 0; i < asteroids.length; i++) {
+        const a = asteroids[i];
+        if (!a.alive) continue;
+
+        const dx = bhX - a.x;
+        const dy = bhY - a.y;
+        const distSq = dx * dx + dy * dy + 100;
+        const dist = Math.sqrt(distSq);
+
+        if (dist < effectiveRange && dist > 0) {
+            const force = BH_G * bhMass * a.mass / distSq;
+            const ax = (dx / dist) * force / a.mass;
+            const ay = (dy / dist) * force / a.mass;
+
+            a.vx += Math.max(-0.2, Math.min(0.2, ax));
+            a.vy += Math.max(-0.2, Math.min(0.2, ay));
+        }
+
+        if (dist < bhRadius + a.radius) {
+            a.alive = false;
+            continue;
+        }
+
+        for (let j = i + 1; j < asteroids.length; j++) {
+            const b = asteroids[j];
+            if (!b.alive) continue;
+
+            const dx2 = b.x - a.x;
+            const dy2 = b.y - a.y;
+            const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+            const minDist = a.radius + b.radius;
+
+            if (dist2 < minDist && dist2 > 0) {
+                const nx = dx2 / dist2;
+                const ny = dy2 / dist2;
+
+                const p = 2 * (a.vx * nx + a.vy * ny - b.vx * nx - b.vy * ny) / (a.mass + b.mass);
+
+                a.vx -= p * b.mass * nx;
+                a.vy -= p * b.mass * ny;
+                b.vx += p * a.mass * nx;
+                b.vy += p * a.mass * ny;
+
+                const overlap = minDist - dist2;
+                a.x -= nx * overlap / 2;
+                a.y -= ny * overlap / 2;
+                b.x += nx * overlap / 2;
+                b.y += ny * overlap / 2;
+            }
+        }
+
+        for (let j = 0; j < asteroids.length; j++) {
+            if (i === j || !asteroids[j].alive) continue;
+            a.applyGravityFrom(asteroids[j]);
+        }
+
+        a.updateOrbit(bhX, bhY);
+        a.update();
+        a.draw();
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+</script>
+
+
+</body></html>
